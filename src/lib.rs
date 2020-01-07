@@ -38,6 +38,8 @@
 #![warn(clippy::nursery)]
 #![allow(clippy::doc_markdown)]
 
+use std::{convert::TryFrom, fmt::Display, str::FromStr};
+
 use chrono::{Local, NaiveDate};
 use thiserror::Error;
 
@@ -60,7 +62,12 @@ pub enum ChronVerError {
 
 /// Represents a version number conforming to the chronologic versioning scheme.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[cfg_attr(feature = "serde_derive", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(try_from = "&str"),
+    serde(into = "String")
+)]
 pub struct Version {
     /// The date of release, to be updated whenever a new release is made on a different date than
     /// the last release.
@@ -165,7 +172,7 @@ impl Default for Version {
     }
 }
 
-impl std::str::FromStr for Version {
+impl FromStr for Version {
     type Err = ChronVerError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -173,7 +180,7 @@ impl std::str::FromStr for Version {
     }
 }
 
-impl std::fmt::Display for Version {
+impl Display for Version {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         f.write_str(&self.date.format(DATE_FORMAT).to_string())?;
         if self.changeset > 0 {
@@ -204,11 +211,30 @@ impl From<(i32, u32, u32)> for Version {
     }
 }
 
+impl TryFrom<&str> for Version {
+    type Error = ChronVerError;
+
+    #[inline]
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
+
+impl From<Version> for String {
+    #[inline]
+    #[must_use]
+    fn from(version: Version) -> Self {
+        format!("{}", version)
+    }
+}
+
+/// A label in the version metadata.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[cfg_attr(
-    feature = "serde_derive",
+    feature = "serde",
     derive(serde::Serialize, serde::Deserialize),
-    serde(untagged)
+    serde(from = "&str"),
+    serde(into = "String")
 )]
 pub enum Label {
     /// A simple text label without a specific format.
@@ -234,7 +260,7 @@ impl Label {
     }
 }
 
-impl std::fmt::Display for Label {
+impl Display for Label {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Text(s) => f.write_str(s),
@@ -244,9 +270,18 @@ impl std::fmt::Display for Label {
 }
 
 impl From<&str> for Label {
+    #[inline]
     #[must_use]
     fn from(s: &str) -> Self {
         Self::parse(s)
+    }
+}
+
+impl From<Label> for String {
+    #[inline]
+    #[must_use]
+    fn from(label: Label) -> Self {
+        format!("{}", label)
     }
 }
 
@@ -360,19 +395,35 @@ mod tests {
         assert_eq!(ChronVerError::InvalidLabel, version.unwrap_err());
     }
 
-    #[cfg(feature = "serde_derive")]
+    #[cfg(feature = "serde")]
     #[test]
     fn serialize() {
         let version = Version::parse("2019.01.06.1-test.2");
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&version.unwrap()).unwrap()
+        assert_eq!(
+            "\"2019.01.06.1-test.2\"",
+            serde_json::to_string(&version.unwrap()).unwrap()
         );
 
         let version = Version::parse("2019.01.06.1-test");
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&version.unwrap()).unwrap()
+        assert_eq!(
+            "\"2019.01.06.1-test\"",
+            serde_json::to_string(&version.unwrap()).unwrap()
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn deserialize() {
+        let version = Version::parse("2019.01.06.1-test.2");
+        assert_eq!(
+            serde_json::from_str::<Version>("\"2019.01.06.1-test.2\"").unwrap(),
+            version.unwrap()
+        );
+
+        let version = Version::parse("2019.01.06.1-test");
+        assert_eq!(
+            serde_json::from_str::<Version>("\"2019.01.06.1-test\"").unwrap(),
+            version.unwrap()
         );
     }
 }
