@@ -14,6 +14,8 @@
 //!
 //! ## Versions
 //!
+//! A simple `Version` can be constructed by using the `parse` method:
+//!
 //! ```
 //! use chronver::Version;
 //! use chrono::NaiveDate;
@@ -25,11 +27,15 @@
 //! }));
 //! ```
 //!
+//! Versions can also be compared with each other:
+//!
 //! ```
 //! use chronver::Version;
 //!
-//! assert!(Version::parse("2020.01.06-alpha").unwrap() != Version::parse("2020.01.06-beta").unwrap());
-//! assert!(Version::parse("2020.01.06-alpha").unwrap() > Version::parse("2020.01.06").unwrap());
+//! assert_ne!(
+//!     Version::parse("2020.01.06-alpha").unwrap(),
+//!     Version::parse("2020.01.06-beta").unwrap()
+//! );
 //! ```
 //!
 
