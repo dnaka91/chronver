@@ -4,11 +4,18 @@ version = "0.1.0"
 authors = ["Dominik Nakamura <dnaka91@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
+readme = "README.md"
+description = "Chronologic versionp parsing."
+homepage = "https://github.com/dnaka91/chronver"
+repository = "https://github.com/dnaka91/chronver"
+keywords = ["version", "chronologic"]
+categories = ["development-tools", "parsing"]
+exclude = [".gitignore", "deny.toml"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
-anyhow = "1.0.26"
 chrono = "0.4.10"
 serde = { version = "1.0.104", optional = true, features = ["derive"] }
 thiserror = "1.0.9"
