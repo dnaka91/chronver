@@ -33,6 +33,7 @@
 //! ```
 //!
 
+#![doc(html_root_url = "https://docs.rs/chronver/0.1.0")]
 #![forbid(unsafe_code)]
 #![deny(clippy::all, clippy::pedantic)]
 #![warn(clippy::nursery)]
