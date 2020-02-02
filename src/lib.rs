@@ -105,6 +105,12 @@ macro_rules! ensure {
 
 impl Version {
     /// Parse a string into a chronver object.
+    ///
+    /// # Errors
+    ///
+    /// An error can occur in two cases. First, when the very first part of the version is not a
+    /// valid date in the format `YYYY.MM.DD`. Second, when a **changeset** follows the date but
+    /// it is not a valid `u32` number.
     pub fn parse(version: &str) -> Result<Self, ChronVerError> {
         ensure!(version.len() >= DATE_LENGTH, ChronVerError::TooShort);
 
