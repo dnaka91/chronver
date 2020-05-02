@@ -5,7 +5,7 @@ authors = ["Dominik Nakamura <dnaka91@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-description = "Chronologic versionp parsing."
+description = "Chronologic version parsing."
 homepage = "https://github.com/dnaka91/chronver"
 repository = "https://github.com/dnaka91/chronver"
 keywords = ["version", "chronologic"]
@@ -16,15 +16,15 @@ exclude = [".gitignore", "deny.toml"]
 all-features = true
 
 [dependencies]
-chrono = "0.4.10"
-serde = { version = "1.0.104", optional = true, features = ["derive"] }
-thiserror = "1.0.9"
+chrono = "0.4.11"
+serde = { version = "1.0.106", optional = true, features = ["derive"] }
+thiserror = "1.0.16"
 
 [dev-dependencies]
-criterion = "0.3.0"
+criterion = "0.3.2"
 semver = "0.9.0"
-serde_json = "1.0.44"
-version-sync = "0.8.1"
+serde_json = "1.0.52"
+version-sync = "0.9.0"
 
 [[bench]]
 name = "parse"
