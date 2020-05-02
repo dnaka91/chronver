@@ -43,7 +43,11 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::all, clippy::pedantic)]
 #![warn(clippy::nursery)]
-#![allow(clippy::doc_markdown)]
+#![warn(
+    missing_docs,
+    missing_doc_code_examples,
+    clippy::missing_docs_in_private_items
+)]
 
 use std::{convert::TryFrom, fmt::Display, str::FromStr};
 
@@ -90,9 +94,11 @@ pub struct Version {
     pub label: Option<Label>,
 }
 
+/// Minimum length that a version must have to be further processed.
 const DATE_LENGTH: usize = 10;
+/// Format for the date part of a version.
 const DATE_FORMAT: &str = "%Y.%m.%d";
-
+/// The special label to decide whether the version introduces breaking changes.
 const BREAK_LABEL: &str = "break";
 
 macro_rules! ensure {
@@ -105,6 +111,34 @@ macro_rules! ensure {
 
 impl Version {
     /// Parse a string into a chronver object.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chronver::{Version, Label};
+    /// use chrono::NaiveDate;
+    ///
+    /// // Basic version with just a date
+    /// assert_eq!(Version::parse("2020.03.05"), Ok(Version {
+    ///     date: NaiveDate::from_ymd(2020, 3, 5),
+    ///     changeset: 0,
+    ///     label: None,
+    /// }));
+    ///
+    /// // Version with a changeset
+    /// assert_eq!(Version::parse("2020.03.05.2"), Ok(Version {
+    ///     date: NaiveDate::from_ymd(2020, 3, 5),
+    ///     changeset: 2,
+    ///     label: None,
+    /// }));
+    ///
+    /// // And with label
+    /// assert_eq!(Version::parse("2020.03.05.2-new"), Ok(Version {
+    ///     date: NaiveDate::from_ymd(2020, 3, 5),
+    ///     changeset: 2,
+    ///     label: Some(Label::Text("new".to_owned())),
+    /// }));
+    /// ```
     ///
     /// # Errors
     ///
@@ -163,6 +197,15 @@ impl Version {
     }
 
     /// Check whether the current version introduces breaking changes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chronver::Version;
+    ///
+    /// assert!(Version::parse("2020.03.05-break").unwrap().is_breaking());
+    /// assert!(!Version::parse("2020.03.05").unwrap().is_breaking());
+    /// ```
     #[must_use]
     pub fn is_breaking(&self) -> bool {
         if let Some(label) = &self.label {
@@ -258,6 +301,19 @@ pub enum Label {
 }
 
 impl Label {
+    ///
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use chronver::Label;
+    ///
+    /// assert_eq!(Label::parse("test"), Label::Text("test".to_owned()));
+    /// assert_eq!(Label::parse("feature.1"), Label::Feature {
+    ///     branch: "feature".to_owned(),
+    ///     changeset: 1,
+    /// });
+    /// ```
     #[must_use]
     pub fn parse(label: &str) -> Self {
         if let Some(i) = label.rfind('.') {
@@ -300,6 +356,8 @@ impl From<Label> for String {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::wildcard_imports)]
+
     use super::*;
 
     #[test]
