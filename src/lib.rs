@@ -297,7 +297,12 @@ pub enum Label {
     Text(String),
     /// A feature label in the format `BRANCH.CHANGESET`, where the changeset can be
     /// omitted when it is 0.
-    Feature { branch: String, changeset: u32 },
+    Feature {
+        /// Name of the feature branch.
+        branch: String,
+        /// Changeset number, omitted if 0.
+        changeset: u32,
+    },
 }
 
 impl Label {
