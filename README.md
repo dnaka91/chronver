@@ -6,7 +6,7 @@
 
 Chronologic versioning (see <https://chronver.org>) is a set of rules for assigning version numbers.
 
-[build-img]: https://github.com/dnaka91/chronver/workflows/CI/badge.svg?branch=master
+[build-img]: https://github.com/dnaka91/chronver/workflows/CI/badge.svg?branch=main
 [build-url]: https://github.com/dnaka91/chronver/actions?query=workflow%3ACI
 [crates-img]: https://img.shields.io/crates/v/chronver
 [crates-url]: https://crates.io/crates/chronver
