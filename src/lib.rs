@@ -153,8 +153,7 @@ impl Version {
 
         let rem = &version[DATE_LENGTH..];
 
-        let (changeset, label_pos) = if rem.starts_with('.') {
-            let rem = &rem[1..];
+        let (changeset, label_pos) = if let Some(rem) = rem.strip_prefix('.') {
             let end = rem
                 .find(|c: char| !c.is_ascii_digit())
                 .unwrap_or_else(|| rem.len());
@@ -169,8 +168,8 @@ impl Version {
 
         let rem = &rem[label_pos..];
 
-        let label = if rem.starts_with('-') {
-            Some(rem[1..].into())
+        let label = if let Some(rem) = rem.strip_prefix('-') {
+            Some(rem.into())
         } else {
             ensure!(rem.is_empty(), ChronVerError::InvalidLabel);
             None
@@ -444,10 +443,7 @@ mod tests {
     #[test]
     fn invalid_date() {
         let version = Version::parse("2019.30.01");
-        assert!(match version.unwrap_err() {
-            ChronVerError::InvalidVersion(_) => true,
-            _ => false,
-        });
+        assert!(matches!(version.unwrap_err(), ChronVerError::InvalidVersion(_)));
     }
 
     #[test]
@@ -459,10 +455,7 @@ mod tests {
     #[test]
     fn invalid_changeset_number() {
         let version = Version::parse("2019.01.06.a");
-        assert!(match version.unwrap_err() {
-            ChronVerError::InvalidChangeset(_) => true,
-            _ => false,
-        });
+        assert!(matches!(version.unwrap_err(), ChronVerError::InvalidChangeset(_)));
     }
 
     #[test]
