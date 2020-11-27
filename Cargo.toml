@@ -10,7 +10,7 @@ homepage = "https://github.com/dnaka91/chronver"
 repository = "https://github.com/dnaka91/chronver"
 keywords = ["version", "chronologic"]
 categories = ["development-tools", "parsing"]
-exclude = [".gitignore", "deny.toml"]
+exclude = [".github", ".gitignore", "deny.toml", "release.toml"]
 
 [package.metadata.docs.rs]
 all-features = true
