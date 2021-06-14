@@ -207,10 +207,8 @@ impl Version {
     /// ```
     #[must_use]
     pub fn is_breaking(&self) -> bool {
-        if let Some(label) = &self.label {
-            if let Label::Text(label) = &label {
-                return label == BREAK_LABEL;
-            }
+        if let Some(Label::Text(label)) = &self.label {
+            return label == BREAK_LABEL;
         }
         false
     }
@@ -443,7 +441,10 @@ mod tests {
     #[test]
     fn invalid_date() {
         let version = Version::parse("2019.30.01");
-        assert!(matches!(version.unwrap_err(), ChronVerError::InvalidVersion(_)));
+        assert!(matches!(
+            version.unwrap_err(),
+            ChronVerError::InvalidVersion(_)
+        ));
     }
 
     #[test]
@@ -455,7 +456,10 @@ mod tests {
     #[test]
     fn invalid_changeset_number() {
         let version = Version::parse("2019.01.06.a");
-        assert!(matches!(version.unwrap_err(), ChronVerError::InvalidChangeset(_)));
+        assert!(matches!(
+            version.unwrap_err(),
+            ChronVerError::InvalidChangeset(_)
+        ));
     }
 
     #[test]
