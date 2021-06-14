@@ -17,14 +17,14 @@ all-features = true
 
 [dependencies]
 chrono = "0.4.19"
-serde = { version = "1.0.117", optional = true, features = ["derive"] }
-thiserror = "1.0.22"
+serde = { version = "1.0.126", optional = true, features = ["derive"] }
+thiserror = "1.0.25"
 
 [dev-dependencies]
-criterion = "0.3.3"
-semver = "0.11.0"
-serde_json = "1.0.59"
-version-sync = "0.9.1"
+criterion = "0.3.4"
+semver = "1.0.3"
+serde_json = "1.0.64"
+version-sync = "0.9.2"
 
 [[bench]]
 name = "parse"
