@@ -109,6 +109,7 @@ const DATE_FORMAT: &[FormatItem<'static>] = format_description!("[year].[month].
 /// The special label to decide whether the version introduces breaking changes.
 const BREAK_LABEL: &str = "break";
 
+/// Shorthand to return an error when a condition is invalid.
 macro_rules! ensure {
     ($cond:expr, $err:expr $(,)?) => {
         if !$cond {
