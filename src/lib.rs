@@ -18,10 +18,10 @@
 //!
 //! ```
 //! use chronver::Version;
-//! use chrono::NaiveDate;
+//! use time::macros::date;
 //!
 //! assert!(Version::parse("2020.01.06") == Ok(Version {
-//!     date: NaiveDate::from_ymd(2020, 1, 6),
+//!     date: date!(2020-01-06),
 //!     changeset: 0,
 //!     label: None,
 //! }));
@@ -45,14 +45,19 @@
 #![warn(clippy::nursery)]
 #![warn(
     missing_docs,
-    missing_doc_code_examples,
+    rustdoc::missing_doc_code_examples,
     clippy::missing_docs_in_private_items
 )]
 
-use std::{convert::TryFrom, fmt::Display, str::FromStr};
+use std::{
+    convert::TryFrom,
+    fmt::{self, Display},
+    str::FromStr,
+};
 
-use chrono::{Local, NaiveDate};
 use thiserror::Error;
+use time::{format_description::FormatItem, macros::format_description, OffsetDateTime};
+pub use time::{Date, Month};
 
 /// An error type for this crate.
 #[derive(Error, Debug, Clone, Eq, PartialEq)]
@@ -62,7 +67,10 @@ pub enum ChronVerError {
     TooShort,
     /// An error occurred while parsing the version component.
     #[error("Invalid version string")]
-    InvalidVersion(#[from] chrono::ParseError),
+    InvalidVersion(#[from] time::error::Parse),
+    /// An error occurred while constructing an version from date components.
+    #[error("Invalid date components")]
+    InvalidComponents(#[from] time::error::ComponentRange),
     /// An error occurred while parsing the changeset component.
     #[error("Invalid changeset")]
     InvalidChangeset(#[from] std::num::ParseIntError),
@@ -82,7 +90,7 @@ pub enum ChronVerError {
 pub struct Version {
     /// The date of release, to be updated whenever a new release is made on a different date than
     /// the last release.
-    pub date: NaiveDate,
+    pub date: Date,
     /// The changeset number, to be incremented when a change was released on the same day.
     pub changeset: u32,
     /// The optional label, which can have any format or follow a branch formatting (see [`Label`]
@@ -97,7 +105,7 @@ pub struct Version {
 /// Minimum length that a version must have to be further processed.
 const DATE_LENGTH: usize = 10;
 /// Format for the date part of a version.
-const DATE_FORMAT: &str = "%Y.%m.%d";
+const DATE_FORMAT: &[FormatItem<'static>] = format_description!("[year].[month].[day]");
 /// The special label to decide whether the version introduces breaking changes.
 const BREAK_LABEL: &str = "break";
 
@@ -116,25 +124,25 @@ impl Version {
     ///
     /// ```
     /// use chronver::{Version, Label};
-    /// use chrono::NaiveDate;
+    /// use time::macros::date;
     ///
     /// // Basic version with just a date
     /// assert_eq!(Version::parse("2020.03.05"), Ok(Version {
-    ///     date: NaiveDate::from_ymd(2020, 3, 5),
+    ///     date: date!(2020-03-05),
     ///     changeset: 0,
     ///     label: None,
     /// }));
     ///
     /// // Version with a changeset
     /// assert_eq!(Version::parse("2020.03.05.2"), Ok(Version {
-    ///     date: NaiveDate::from_ymd(2020, 3, 5),
+    ///     date: date!(2020-03-05),
     ///     changeset: 2,
     ///     label: None,
     /// }));
     ///
     /// // And with label
     /// assert_eq!(Version::parse("2020.03.05.2-new"), Ok(Version {
-    ///     date: NaiveDate::from_ymd(2020, 3, 5),
+    ///     date: date!(2020-03-05),
     ///     changeset: 2,
     ///     label: Some(Label::Text("new".to_owned())),
     /// }));
@@ -148,8 +156,8 @@ impl Version {
     pub fn parse(version: &str) -> Result<Self, ChronVerError> {
         ensure!(version.len() >= DATE_LENGTH, ChronVerError::TooShort);
 
-        let date = NaiveDate::parse_from_str(&version[..DATE_LENGTH], DATE_FORMAT)
-            .map_err(ChronVerError::from)?;
+        let date =
+            Date::parse(&version[..DATE_LENGTH], &DATE_FORMAT).map_err(ChronVerError::from)?;
 
         let rem = &version[DATE_LENGTH..];
 
@@ -185,7 +193,7 @@ impl Version {
     /// Update the version to the current date or increment the changeset in case the date
     /// is the same. If a label exists, it will be removed.
     pub fn update(&mut self) {
-        let new_date = Local::now().date().naive_local();
+        let new_date = OffsetDateTime::now_utc().date();
         if self.date == new_date {
             self.changeset += 1;
         } else {
@@ -218,7 +226,7 @@ impl Default for Version {
     #[must_use]
     fn default() -> Self {
         Self {
-            date: Local::now().date().naive_local(),
+            date: OffsetDateTime::now_utc().date(),
             changeset: 0,
             label: None,
         }
@@ -234,8 +242,8 @@ impl FromStr for Version {
 }
 
 impl Display for Version {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.write_str(&self.date.format(DATE_FORMAT).to_string())?;
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(&self.date.format(&DATE_FORMAT).map_err(|_| fmt::Error)?)?;
         if self.changeset > 0 {
             write!(f, ".{}", self.changeset)?;
         }
@@ -246,9 +254,9 @@ impl Display for Version {
     }
 }
 
-impl From<NaiveDate> for Version {
+impl From<Date> for Version {
     #[must_use]
-    fn from(date: NaiveDate) -> Self {
+    fn from(date: Date) -> Self {
         Self {
             date,
             changeset: 0,
@@ -257,10 +265,13 @@ impl From<NaiveDate> for Version {
     }
 }
 
-impl From<(i32, u32, u32)> for Version {
-    #[must_use]
-    fn from(tuple: (i32, u32, u32)) -> Self {
-        NaiveDate::from_ymd(tuple.0, tuple.1, tuple.2).into()
+impl TryFrom<(i32, Month, u8)> for Version {
+    type Error = ChronVerError;
+
+    fn try_from(tuple: (i32, Month, u8)) -> Result<Self, Self::Error> {
+        Date::from_calendar_date(tuple.0, tuple.1, tuple.2)
+            .map(Self::from)
+            .map_err(Into::into)
     }
 }
 
@@ -332,7 +343,7 @@ impl Label {
 }
 
 impl Display for Label {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Text(s) => f.write_str(s),
             Self::Feature { branch, changeset } => write!(f, "{}.{}", branch, changeset),
@@ -358,17 +369,14 @@ impl From<Label> for String {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::wildcard_imports)]
+    use time::macros::date;
 
     use super::*;
 
     #[test]
     fn simple_version() {
         let version = Version::parse("2019.01.06");
-        assert_eq!(
-            Version::from(NaiveDate::from_ymd(2019, 1, 6)),
-            version.unwrap()
-        );
+        assert_eq!(Version::from(date!(2019 - 01 - 06)), version.unwrap());
     }
 
     #[test]
@@ -376,7 +384,7 @@ mod tests {
         let version = Version::parse("2019.01.06.12");
         assert_eq!(
             Version {
-                date: NaiveDate::from_ymd(2019, 1, 6),
+                date: date!(2019 - 01 - 06),
                 changeset: 12,
                 label: None
             },
@@ -387,10 +395,7 @@ mod tests {
     #[test]
     fn with_default_changeset() {
         let version = Version::parse("2019.01.06.0");
-        assert_eq!(
-            Version::from(NaiveDate::from_ymd(2019, 1, 6)),
-            version.unwrap()
-        );
+        assert_eq!(Version::from(date!(2019 - 01 - 06)), version.unwrap());
     }
 
     #[test]
@@ -398,7 +403,7 @@ mod tests {
         let version = Version::parse("2019.01.06-test");
         assert_eq!(
             Version {
-                date: NaiveDate::from_ymd(2019, 1, 6),
+                date: date!(2019 - 01 - 06),
                 changeset: 0,
                 label: Some(Label::Text("test".to_owned()))
             },
@@ -411,7 +416,7 @@ mod tests {
         let version = Version::parse("2019.01.06.1-test");
         assert_eq!(
             Version {
-                date: NaiveDate::from_ymd(2019, 1, 6),
+                date: date!(2019 - 01 - 06),
                 changeset: 1,
                 label: Some(Label::Text("test".to_owned()))
             },
@@ -424,7 +429,7 @@ mod tests {
         let version = Version::parse("2019.01.06.0-test");
         assert_eq!(
             Version {
-                date: NaiveDate::from_ymd(2019, 1, 6),
+                date: date!(2019 - 01 - 06),
                 changeset: 0,
                 label: Some(Label::Text("test".to_owned()))
             },

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - ReleaseDate
 
+### Changed
+
+- Replace `chrono` with `time` due to recent security issues and, as a side effect, better parsing
+  performance.
+
 ## [0.1.0]
 
 ### Added
