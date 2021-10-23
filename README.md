@@ -19,7 +19,7 @@ To use `chronver`, add it to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-chronver = "0.1.0"
+chronver = "0.2.0"
 ```
 
 ## License
