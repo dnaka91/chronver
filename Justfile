@@ -19,9 +19,9 @@ coverage:
 # upload coverage to GitHub Pages
 upload-coverage: coverage
     git checkout gh-pages
-    rm -rf badges examples src tests coverage.json index.html
+    rm -rf badges src tests coverage.json index.html
     cp -R target/debug/coverage/ .
-    git add -A badges examples src tests coverage.json index.html
+    git add -A badges src tests coverage.json index.html
     git commit -m "Coverage for $(git rev-parse --short main)"
     # git push
     git checkout main
