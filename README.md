@@ -3,6 +3,7 @@
 [![Build Status][build-img]][build-url]
 [![Repository][crates-img]][crates-url]
 [![Documentation][doc-img]][doc-url]
+[![Code Coverage][cover-img]][cover-url]
 
 Chronologic versioning (see <https://chronver.org>) is a set of rules for assigning version numbers.
 
@@ -12,6 +13,8 @@ Chronologic versioning (see <https://chronver.org>) is a set of rules for assign
 [crates-url]: https://crates.io/crates/chronver
 [doc-img]: https://img.shields.io/badge/docs.rs-chronver-4d76ae?style=for-the-badge
 [doc-url]: https://docs.rs/chronver
+[cover-img]: https://img.shields.io/endpoint?url=https://dnaka91.github.io/chronver/coverage.json&style=for-the-badge
+[cover-url]: https://dnaka91.github.io/chronver
 
 ## Installation
 
