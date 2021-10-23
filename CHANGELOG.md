@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Replace `chrono` with `time` due to recent security issues and, as a side effect, better parsing
   performance.
+- Switch to Rust edition 2021 (MSRV is `1.56` now).
 
 ## [0.1.0]
 
