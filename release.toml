@@ -1,5 +1,6 @@
 sign-commit = true
-no-dev-version = true
+sign-tag = true
+dev-version = false
 
 # Update README.md version
 [[pre-release-replacements]]
