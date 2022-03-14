@@ -163,9 +163,7 @@ impl Version {
         let rem = &version[DATE_LENGTH..];
 
         let (changeset, label_pos) = if let Some(rem) = rem.strip_prefix('.') {
-            let end = rem
-                .find(|c: char| !c.is_ascii_digit())
-                .unwrap_or_else(|| rem.len());
+            let end = rem.find(|c: char| !c.is_ascii_digit()).unwrap_or(rem.len());
             (rem[..end].parse().map_err(ChronVerError::from)?, end + 1)
         } else {
             ensure!(
