@@ -2,6 +2,9 @@
 unlicensed = "deny"
 copyleft = "deny"
 allow-osi-fsf-free = "both"
+exceptions = [
+	{ allow = ["Unicode-DFS-2016"], name = "unicode-ident" },
+]
 
 [bans]
 multiple-versions = "warn"
