@@ -247,7 +247,7 @@ impl Display for Version {
             write!(f, ".{}", self.changeset)?;
         }
         if let Some(label) = &self.label {
-            write!(f, "-{}", label)?;
+            write!(f, "-{label}")?;
         }
         Ok(())
     }
@@ -287,7 +287,7 @@ impl From<Version> for String {
     #[inline]
     #[must_use]
     fn from(version: Version) -> Self {
-        format!("{}", version)
+        format!("{version}")
     }
 }
 
@@ -345,7 +345,7 @@ impl Display for Label {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Text(s) => f.write_str(s),
-            Self::Feature { branch, changeset } => write!(f, "{}.{}", branch, changeset),
+            Self::Feature { branch, changeset } => write!(f, "{branch}.{changeset}"),
         }
     }
 }
@@ -362,7 +362,7 @@ impl From<Label> for String {
     #[inline]
     #[must_use]
     fn from(label: Label) -> Self {
-        format!("{}", label)
+        format!("{label}")
     }
 }
 

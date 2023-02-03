@@ -3,7 +3,7 @@ name = "chronver"
 version = "0.2.0"
 authors = ["Dominik Nakamura <dnaka91@gmail.com>"]
 edition = "2021"
-rust-version = "1.59"
+rust-version = "1.60"
 license = "MIT"
 readme = "README.md"
 description = "Chronologic version parsing."
@@ -17,14 +17,14 @@ exclude = [".github", ".gitignore", "deny.toml", "release.toml"]
 all-features = true
 
 [dependencies]
-serde = { version = "1.0.145", optional = true, features = ["derive"] }
-thiserror = "1.0.37"
-time = { version = "0.3.15", features = ["formatting", "macros", "parsing"] }
+serde = { version = "1.0.152", optional = true, features = ["derive"] }
+thiserror = "1.0.38"
+time = { version = "0.3.17", features = ["formatting", "macros", "parsing"] }
 
 [dev-dependencies]
 criterion = { version = "0.4.0", default-features = false }
-semver = "1.0.14"
-serde_json = "1.0.85"
+semver = "1.0.16"
+serde_json = "1.0.91"
 version-sync = "0.9.4"
 
 [[bench]]
