@@ -3,14 +3,14 @@
 //! Chronologic versioning (see <https://chronver.org>) is a set of rules for assigning version
 //! numbers.
 //!
-//! ## ChronVer overview
+//! ## `ChronVer` overview
 //!
-//! Given a version number YEAR.MONTH.DAY.CHANGESET_IDENTIFIER, increment the:
+//! Given a version number `YEAR.MONTH.DAY.CHANGESET_IDENTIFIER`, increment the:
 //!
 //! 1. YEAR version when the year changes,
 //! 2. MONTH version when the month changes,
 //! 3. DAY version when the day changes, and the
-//! 4. CHANGESET_IDENTIFIER everytime you commit a change to your package/project.
+//! 4. `CHANGESET_IDENTIFIER` everytime you commit a change to your package/project.
 //!
 //! ## Versions
 //!
