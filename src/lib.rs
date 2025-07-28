@@ -59,7 +59,7 @@ use std::{
 };
 
 use thiserror::Error;
-use time::{OffsetDateTime, format_description::FormatItem, macros::format_description};
+use time::OffsetDateTime;
 
 /// An error type for this crate.
 #[derive(Error, Debug, Clone, Eq, PartialEq)]
@@ -69,7 +69,7 @@ pub enum ChronVerError {
     TooShort,
     /// An error occurred while parsing the version component.
     #[error("Invalid version string")]
-    InvalidVersion(#[from] time::error::Parse),
+    InvalidVersion,
     /// An error occurred while constructing an version from date components.
     #[error("Invalid date components")]
     InvalidComponents(#[from] time::error::ComponentRange),
@@ -102,8 +102,6 @@ pub struct Version {
 
 /// Minimum length that a version must have to be further processed.
 const DATE_LENGTH: usize = 10;
-/// Format for the date part of a version.
-const DATE_FORMAT: &[FormatItem<'static>] = format_description!("[year].[month].[day]");
 
 /// Shorthand to return an error when a condition is invalid.
 macro_rules! ensure {
@@ -164,10 +162,7 @@ impl Version {
     pub fn parse(version: &str) -> Result<Self, ChronVerError> {
         ensure!(version.len() >= DATE_LENGTH, ChronVerError::TooShort);
 
-        let date = time::Date::parse(&version[..DATE_LENGTH], &DATE_FORMAT)
-            .map_err(ChronVerError::from)?
-            .into();
-
+        let date = version[..DATE_LENGTH].parse()?;
         let rem = &version[DATE_LENGTH..];
 
         let (changeset, kind_pos) = if let Some(rem) = rem.strip_prefix('.') {
@@ -298,27 +293,92 @@ impl From<Version> for String {
     }
 }
 
+/// The date which is the main component of a chronologic version.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Date {
-    year: u16,
-    month: u8,
-    day: u8,
+pub struct Date(time::Date);
+
+impl Date {
+    /// Get the year component of the date.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let date = "2020.01.06".parse::<chronver::Date>().unwrap();
+    /// assert_eq!(2020, date.year());
+    /// ```
+    #[must_use]
+    pub const fn year(&self) -> i32 {
+        self.0.year()
+    }
+
+    /// Get the month component of the date.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let date = "2020.01.06".parse::<chronver::Date>().unwrap();
+    /// assert_eq!(1, date.month());
+    /// ```
+    #[must_use]
+    pub const fn month(&self) -> u8 {
+        self.0.month() as u8
+    }
+
+    /// Get the day component of the date.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let date = "2020.01.06".parse::<chronver::Date>().unwrap();
+    /// assert_eq!(6, date.day());
+    /// ```
+    #[must_use]
+    pub const fn day(&self) -> u8 {
+        self.0.day()
+    }
 }
 
 impl Display for Date {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.{}.{}", self.year, self.month, self.day)
+        write!(
+            f,
+            "{:04}.{:02}.{:02}",
+            self.0.year(),
+            u8::from(self.0.month()),
+            self.0.day()
+        )
+    }
+}
+
+impl FromStr for Date {
+    type Err = ChronVerError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (year, rem) = s.split_once('.').ok_or(ChronVerError::InvalidVersion)?;
+        let (month, day) = rem.split_once('.').ok_or(ChronVerError::InvalidVersion)?;
+
+        let date = time::Date::from_calendar_date(
+            year.parse()?,
+            month.parse::<u8>()?.try_into()?,
+            day.parse()?,
+        )?;
+
+        Ok(Self(date))
+    }
+}
+
+impl TryFrom<&str> for Date {
+    type Error = ChronVerError;
+
+    #[inline]
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        value.parse()
     }
 }
 
 impl From<time::Date> for Date {
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     fn from(value: time::Date) -> Self {
-        Self {
-            year: value.year() as u16,
-            month: value.month() as u8,
-            day: value.day(),
-        }
+        Self(value)
     }
 }
 
@@ -539,7 +599,7 @@ mod tests {
         let version = Version::parse("2019.30.01");
         assert!(matches!(
             version.unwrap_err(),
-            ChronVerError::InvalidVersion(_)
+            ChronVerError::InvalidComponents(_)
         ));
     }
 
