@@ -23,7 +23,7 @@
 //! assert_eq!(
 //!     Version::parse("2020.01.06").unwrap(),
 //!     Version {
-//!         date: date!(2020 - 01 - 06),
+//!         date: date!(2020 - 01 - 06).into(),
 //!         changeset: None,
 //!         kind: Kind::Regular,
 //!     }
@@ -59,7 +59,6 @@ use std::{
 };
 
 use thiserror::Error;
-pub use time::{Date, Month};
 use time::{OffsetDateTime, format_description::FormatItem, macros::format_description};
 
 /// An error type for this crate.
@@ -128,7 +127,7 @@ impl Version {
     /// assert_eq!(
     ///     Version::parse("2020.03.05"),
     ///     Ok(Version {
-    ///         date: date!(2020 - 03 - 05),
+    ///         date: date!(2020 - 03 - 05).into(),
     ///         changeset: None,
     ///         kind: Kind::Regular,
     ///     })
@@ -138,7 +137,7 @@ impl Version {
     /// assert_eq!(
     ///     Version::parse("2020.03.05.2"),
     ///     Ok(Version {
-    ///         date: date!(2020 - 03 - 05),
+    ///         date: date!(2020 - 03 - 05).into(),
     ///         changeset: Changeset::new(2),
     ///         kind: Kind::Regular,
     ///     })
@@ -148,7 +147,7 @@ impl Version {
     /// assert_eq!(
     ///     Version::parse("2020.03.05.2-new"),
     ///     Ok(Version {
-    ///         date: date!(2020 - 03 - 05),
+    ///         date: date!(2020 - 03 - 05).into(),
     ///         changeset: Changeset::new(2),
     ///         kind: Kind::Feature {
     ///             name: "new".to_owned()
@@ -165,8 +164,9 @@ impl Version {
     pub fn parse(version: &str) -> Result<Self, ChronVerError> {
         ensure!(version.len() >= DATE_LENGTH, ChronVerError::TooShort);
 
-        let date =
-            Date::parse(&version[..DATE_LENGTH], &DATE_FORMAT).map_err(ChronVerError::from)?;
+        let date = time::Date::parse(&version[..DATE_LENGTH], &DATE_FORMAT)
+            .map_err(ChronVerError::from)?
+            .into();
 
         let rem = &version[DATE_LENGTH..];
 
@@ -201,7 +201,7 @@ impl Version {
     /// Update the version to the current date or increment the changeset in case the date
     /// is the same. The [`Kind`] will be reset to [`Regular`](Kind::Regular).
     pub fn update(&mut self) {
-        let new_date = OffsetDateTime::now_utc().date();
+        let new_date = OffsetDateTime::now_utc().date().into();
         if self.date == new_date {
             self.changeset = self.changeset.map_or_else(
                 || Changeset::new(1),
@@ -233,7 +233,7 @@ impl Version {
 impl Default for Version {
     fn default() -> Self {
         Self {
-            date: OffsetDateTime::now_utc().date(),
+            date: OffsetDateTime::now_utc().date().into(),
             changeset: None,
             kind: Kind::default(),
         }
@@ -250,7 +250,8 @@ impl FromStr for Version {
 
 impl Display for Version {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.date.format(&DATE_FORMAT).map_err(|_| fmt::Error)?)?;
+        write!(f, "{}", self.date)?;
+
         if let Some(changeset) = self.changeset {
             write!(f, ".{changeset}")?;
         }
@@ -263,21 +264,21 @@ impl Display for Version {
     }
 }
 
-impl From<Date> for Version {
-    fn from(date: Date) -> Self {
+impl From<time::Date> for Version {
+    fn from(date: time::Date) -> Self {
         Self {
-            date,
+            date: date.into(),
             changeset: None,
             kind: Kind::Regular,
         }
     }
 }
 
-impl TryFrom<(i32, Month, u8)> for Version {
+impl TryFrom<(i32, time::Month, u8)> for Version {
     type Error = ChronVerError;
 
-    fn try_from(tuple: (i32, Month, u8)) -> Result<Self, Self::Error> {
-        Date::from_calendar_date(tuple.0, tuple.1, tuple.2)
+    fn try_from(tuple: (i32, time::Month, u8)) -> Result<Self, Self::Error> {
+        time::Date::from_calendar_date(tuple.0, tuple.1, tuple.2)
             .map(Self::from)
             .map_err(Into::into)
     }
@@ -294,6 +295,30 @@ impl TryFrom<&str> for Version {
 impl From<Version> for String {
     fn from(version: Version) -> Self {
         format!("{version}")
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Date {
+    year: u16,
+    month: u8,
+    day: u8,
+}
+
+impl Display for Date {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}.{}", self.year, self.month, self.day)
+    }
+}
+
+impl From<time::Date> for Date {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    fn from(value: time::Date) -> Self {
+        Self {
+            year: value.year() as u16,
+            month: value.month() as u8,
+            day: value.day(),
+        }
     }
 }
 
@@ -444,7 +469,7 @@ mod tests {
         let version = Version::parse("2019.01.06.12");
         assert_eq!(
             Version {
-                date: date!(2019 - 01 - 06),
+                date: date!(2019 - 01 - 06).into(),
                 changeset: Changeset::new(12),
                 kind: Kind::Regular,
             },
@@ -463,7 +488,7 @@ mod tests {
         let version = Version::parse("2019.01.06-test");
         assert_eq!(
             Version {
-                date: date!(2019 - 01 - 06),
+                date: date!(2019 - 01 - 06).into(),
                 changeset: None,
                 kind: Kind::Feature {
                     name: "test".to_owned()
@@ -478,7 +503,7 @@ mod tests {
         let version = Version::parse("2019.01.06.1-test");
         assert_eq!(
             Version {
-                date: date!(2019 - 01 - 06),
+                date: date!(2019 - 01 - 06).into(),
                 changeset: Changeset::new(1),
                 kind: Kind::Feature {
                     name: "test".to_owned()
@@ -493,7 +518,7 @@ mod tests {
         let version = Version::parse("2019.01.06.0-test");
         assert_eq!(
             Version {
-                date: date!(2019 - 01 - 06),
+                date: date!(2019 - 01 - 06).into(),
                 changeset: None,
                 kind: Kind::Feature {
                     name: "test".to_owned()
