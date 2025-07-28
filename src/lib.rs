@@ -37,7 +37,6 @@
 //!     Version::parse("2020.01.06-beta").unwrap()
 //! );
 //! ```
-//!
 
 #![doc(html_root_url = "https://docs.rs/chronver/0.2.1")]
 #![forbid(unsafe_code)]
