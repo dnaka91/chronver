@@ -17,14 +17,17 @@
 //! A simple `Version` can be constructed by using the `parse` method:
 //!
 //! ```
-//! use chronver::Version;
+//! use chronver::{Kind, Version};
 //! use time::macros::date;
 //!
-//! assert!(Version::parse("2020.01.06") == Ok(Version {
-//!     date: date!(2020-01-06),
-//!     changeset: 0,
-//!     label: None,
-//! }));
+//! assert_eq!(
+//!     Version::parse("2020.01.06").unwrap(),
+//!     Version {
+//!         date: date!(2020 - 01 - 06),
+//!         changeset: 0,
+//!         kind: Kind::Regular,
+//!     }
+//! );
 //! ```
 //!
 //! Versions can also be compared with each other:
@@ -38,7 +41,6 @@
 //! );
 //! ```
 
-#![doc(html_root_url = "https://docs.rs/chronver/0.2.1")]
 #![forbid(unsafe_code)]
 #![deny(
     rust_2018_idioms,
@@ -50,7 +52,7 @@
 #![warn(missing_docs, clippy::missing_docs_in_private_items)]
 
 use std::{
-    convert::TryFrom,
+    convert::{Infallible, TryFrom},
     fmt::{self, Display},
     str::FromStr,
 };
@@ -74,9 +76,9 @@ pub enum ChronVerError {
     /// An error occurred while parsing the changeset component.
     #[error("Invalid changeset")]
     InvalidChangeset(#[from] std::num::ParseIntError),
-    /// An error occurred while parsing the label component.
-    #[error("Invalid label")]
-    InvalidLabel,
+    /// An error occurred while parsing the feature component.
+    #[error("Invalid kind")]
+    InvalidKind,
 }
 
 /// Represents a version number conforming to the chronologic versioning scheme.
@@ -93,21 +95,15 @@ pub struct Version {
     pub date: Date,
     /// The changeset number, to be incremented when a change was released on the same day.
     pub changeset: u32,
-    /// The optional label, which can have any format or follow a branch formatting (see [`Label`]
-    /// for more information).
-    ///
-    /// The special label `break` is reserved to signal a release with breaking changes.
-    ///
-    /// [`Label`]: enum.Label.html
-    pub label: Option<Label>,
+    /// The kind, which can have any format or follow a branch formatting. It describes the kind of
+    /// release and carries further semantics.
+    pub kind: Kind,
 }
 
 /// Minimum length that a version must have to be further processed.
 const DATE_LENGTH: usize = 10;
 /// Format for the date part of a version.
 const DATE_FORMAT: &[FormatItem<'static>] = format_description!("[year].[month].[day]");
-/// The special label to decide whether the version introduces breaking changes.
-const BREAK_LABEL: &str = "break";
 
 /// Shorthand to return an error when a condition is invalid.
 macro_rules! ensure {
@@ -124,29 +120,40 @@ impl Version {
     /// # Examples
     ///
     /// ```
-    /// use chronver::{Version, Label};
+    /// use chronver::{Kind, Version};
     /// use time::macros::date;
     ///
     /// // Basic version with just a date
-    /// assert_eq!(Version::parse("2020.03.05"), Ok(Version {
-    ///     date: date!(2020-03-05),
-    ///     changeset: 0,
-    ///     label: None,
-    /// }));
+    /// assert_eq!(
+    ///     Version::parse("2020.03.05"),
+    ///     Ok(Version {
+    ///         date: date!(2020 - 03 - 05),
+    ///         changeset: 0,
+    ///         kind: Kind::Regular,
+    ///     })
+    /// );
     ///
     /// // Version with a changeset
-    /// assert_eq!(Version::parse("2020.03.05.2"), Ok(Version {
-    ///     date: date!(2020-03-05),
-    ///     changeset: 2,
-    ///     label: None,
-    /// }));
+    /// assert_eq!(
+    ///     Version::parse("2020.03.05.2"),
+    ///     Ok(Version {
+    ///         date: date!(2020 - 03 - 05),
+    ///         changeset: 2,
+    ///         kind: Kind::Regular,
+    ///     })
+    /// );
     ///
-    /// // And with label
-    /// assert_eq!(Version::parse("2020.03.05.2-new"), Ok(Version {
-    ///     date: date!(2020-03-05),
-    ///     changeset: 2,
-    ///     label: Some(Label::Text("new".to_owned())),
-    /// }));
+    /// // And with feature
+    /// assert_eq!(
+    ///     Version::parse("2020.03.05.2-new"),
+    ///     Ok(Version {
+    ///         date: date!(2020 - 03 - 05),
+    ///         changeset: 2,
+    ///         kind: Kind::Feature {
+    ///             name: "new".to_owned()
+    ///         },
+    ///     })
+    /// );
     /// ```
     ///
     /// # Errors
@@ -162,35 +169,35 @@ impl Version {
 
         let rem = &version[DATE_LENGTH..];
 
-        let (changeset, label_pos) = if let Some(rem) = rem.strip_prefix('.') {
+        let (changeset, kind_pos) = if let Some(rem) = rem.strip_prefix('.') {
             let end = rem.find(|c: char| !c.is_ascii_digit()).unwrap_or(rem.len());
             (rem[..end].parse().map_err(ChronVerError::from)?, end + 1)
         } else {
             ensure!(
                 rem.is_empty() || rem.starts_with('-'),
-                ChronVerError::InvalidLabel
+                ChronVerError::InvalidKind
             );
             (0, 0)
         };
 
-        let rem = &rem[label_pos..];
+        let rem = &rem[kind_pos..];
 
-        let label = if let Some(rem) = rem.strip_prefix('-') {
-            Some(rem.into())
+        let kind = if let Some(rem) = rem.strip_prefix('-') {
+            rem.into()
         } else {
-            ensure!(rem.is_empty(), ChronVerError::InvalidLabel);
-            None
+            ensure!(rem.is_empty(), ChronVerError::InvalidKind);
+            Kind::Regular
         };
 
         Ok(Self {
             date,
             changeset,
-            label,
+            kind,
         })
     }
 
     /// Update the version to the current date or increment the changeset in case the date
-    /// is the same. If a label exists, it will be removed.
+    /// is the same. The [`Kind`] will be reset to [`Regular`](Kind::Regular).
     pub fn update(&mut self) {
         let new_date = OffsetDateTime::now_utc().date();
         if self.date == new_date {
@@ -199,7 +206,7 @@ impl Version {
             self.date = new_date;
             self.changeset = 0;
         }
-        self.label = None;
+        self.kind = Kind::Regular;
     }
 
     /// Check whether the current version introduces breaking changes.
@@ -213,11 +220,8 @@ impl Version {
     /// assert!(!Version::parse("2020.03.05").unwrap().is_breaking());
     /// ```
     #[must_use]
-    pub fn is_breaking(&self) -> bool {
-        if let Some(Label::Text(label)) = &self.label {
-            return label == BREAK_LABEL;
-        }
-        false
+    pub const fn is_breaking(&self) -> bool {
+        matches!(self.kind, Kind::Breaking)
     }
 }
 
@@ -226,7 +230,7 @@ impl Default for Version {
         Self {
             date: OffsetDateTime::now_utc().date(),
             changeset: 0,
-            label: None,
+            kind: Kind::default(),
         }
     }
 }
@@ -245,9 +249,11 @@ impl Display for Version {
         if self.changeset > 0 {
             write!(f, ".{}", self.changeset)?;
         }
-        if let Some(label) = &self.label {
-            write!(f, "-{label}")?;
+
+        if !matches!(self.kind, Kind::Regular) {
+            write!(f, "-{}", self.kind)?;
         }
+
         Ok(())
     }
 }
@@ -257,7 +263,7 @@ impl From<Date> for Version {
         Self {
             date,
             changeset: 0,
-            label: None,
+            kind: Kind::Regular,
         }
     }
 }
@@ -286,74 +292,85 @@ impl From<Version> for String {
     }
 }
 
-/// A label in the version metadata.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+/// The kind of release, usually [`Self::Regular`].
+#[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize),
     serde(from = "&str"),
     serde(into = "String")
 )]
-pub enum Label {
-    /// A simple text label without a specific format.
-    Text(String),
-    /// A feature label in the format `BRANCH.CHANGESET`, where the changeset can be
-    /// omitted when it is 0.
+pub enum Kind {
+    /// Normal release without any extras.
+    #[default]
+    Regular,
+    /// Breaking changes included.
+    Breaking,
+    /// Feature release that is usually tied to some Git branch and not considered fully stable.
     Feature {
-        /// Name of the feature branch.
-        branch: String,
-        /// Changeset number, omitted if 0.
-        changeset: u32,
+        /// Name of the feature.
+        name: String,
     },
 }
 
-impl Label {
+impl Kind {
     ///
     ///
     /// # Examples
     ///
     /// ```
-    /// use chronver::Label;
+    /// use chronver::Kind;
     ///
-    /// assert_eq!(Label::parse("test"), Label::Text("test".to_owned()));
-    /// assert_eq!(Label::parse("feature.1"), Label::Feature {
-    ///     branch: "feature".to_owned(),
-    ///     changeset: 1,
-    /// });
+    /// assert_eq!(Kind::parse("break"), Kind::Breaking);
+    /// assert_eq!(
+    ///     Kind::parse("feature"),
+    ///     Kind::Feature {
+    ///         name: "feature".to_owned(),
+    ///     }
+    /// );
     /// ```
     #[must_use]
-    pub fn parse(label: &str) -> Self {
-        if let Some(i) = label.rfind('.') {
-            if let Ok(changeset) = label[i + 1..].parse() {
-                return Self::Feature {
-                    branch: label[..i].to_owned(),
-                    changeset,
-                };
-            }
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "" => Self::Regular,
+            "break" => Self::Breaking,
+            _ => Self::Feature {
+                name: value.to_owned(),
+            },
         }
-
-        Self::Text(label.to_owned())
     }
 }
 
-impl Display for Label {
+impl Display for Kind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Text(s) => f.write_str(s),
-            Self::Feature { branch, changeset } => write!(f, "{branch}.{changeset}"),
+            Self::Regular => Ok(()),
+            Self::Breaking => f.write_str("break"),
+            Self::Feature { name } => f.write_str(name),
         }
     }
 }
 
-impl From<&str> for Label {
-    fn from(s: &str) -> Self {
-        Self::parse(s)
+impl FromStr for Kind {
+    type Err = Infallible;
+
+    #[inline]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::parse(s))
     }
 }
 
-impl From<Label> for String {
-    fn from(label: Label) -> Self {
-        format!("{label}")
+impl From<&str> for Kind {
+    #[inline]
+    fn from(value: &str) -> Self {
+        Self::parse(value)
+    }
+}
+
+impl From<Kind> for String {
+    #[inline]
+    fn from(value: Kind) -> Self {
+        format!("{value}")
     }
 }
 
@@ -376,7 +393,7 @@ mod tests {
             Version {
                 date: date!(2019 - 01 - 06),
                 changeset: 12,
-                label: None
+                kind: Kind::Regular,
             },
             version.unwrap()
         );
@@ -389,39 +406,45 @@ mod tests {
     }
 
     #[test]
-    fn with_label() {
+    fn with_feature() {
         let version = Version::parse("2019.01.06-test");
         assert_eq!(
             Version {
                 date: date!(2019 - 01 - 06),
                 changeset: 0,
-                label: Some(Label::Text("test".to_owned()))
+                kind: Kind::Feature {
+                    name: "test".to_owned()
+                }
             },
             version.unwrap()
         );
     }
 
     #[test]
-    fn with_changeset_and_label() {
+    fn with_changeset_and_kind() {
         let version = Version::parse("2019.01.06.1-test");
         assert_eq!(
             Version {
                 date: date!(2019 - 01 - 06),
                 changeset: 1,
-                label: Some(Label::Text("test".to_owned()))
+                kind: Kind::Feature {
+                    name: "test".to_owned()
+                }
             },
             version.unwrap()
         );
     }
 
     #[test]
-    fn with_default_changeset_and_label() {
+    fn with_default_changeset_and_kind() {
         let version = Version::parse("2019.01.06.0-test");
         assert_eq!(
             Version {
                 date: date!(2019 - 01 - 06),
                 changeset: 0,
-                label: Some(Label::Text("test".to_owned()))
+                kind: Kind::Feature {
+                    name: "test".to_owned()
+                }
             },
             version.unwrap()
         );
@@ -445,7 +468,7 @@ mod tests {
     #[test]
     fn invalid_changeset() {
         let version = Version::parse("2019.01.06+111");
-        assert_eq!(ChronVerError::InvalidLabel, version.unwrap_err());
+        assert_eq!(ChronVerError::InvalidKind, version.unwrap_err());
     }
 
     #[test]
@@ -458,9 +481,9 @@ mod tests {
     }
 
     #[test]
-    fn invalid_label() {
+    fn invalid_kind() {
         let version = Version::parse("2019.01.06.1+test");
-        assert_eq!(ChronVerError::InvalidLabel, version.unwrap_err());
+        assert_eq!(ChronVerError::InvalidKind, version.unwrap_err());
     }
 
     #[cfg(feature = "serde")]
