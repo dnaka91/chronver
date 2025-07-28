@@ -43,11 +43,7 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::all, clippy::pedantic)]
 #![warn(clippy::nursery)]
-#![warn(
-    missing_docs,
-    rustdoc::missing_doc_code_examples,
-    clippy::missing_docs_in_private_items
-)]
+#![warn(missing_docs, clippy::missing_docs_in_private_items)]
 
 use std::{
     convert::TryFrom,
@@ -222,7 +218,6 @@ impl Version {
 }
 
 impl Default for Version {
-    #[must_use]
     fn default() -> Self {
         Self {
             date: OffsetDateTime::now_utc().date(),
@@ -254,7 +249,6 @@ impl Display for Version {
 }
 
 impl From<Date> for Version {
-    #[must_use]
     fn from(date: Date) -> Self {
         Self {
             date,
@@ -277,15 +271,12 @@ impl TryFrom<(i32, Month, u8)> for Version {
 impl TryFrom<&str> for Version {
     type Error = ChronVerError;
 
-    #[inline]
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         s.parse()
     }
 }
 
 impl From<Version> for String {
-    #[inline]
-    #[must_use]
     fn from(version: Version) -> Self {
         format!("{version}")
     }
@@ -351,16 +342,12 @@ impl Display for Label {
 }
 
 impl From<&str> for Label {
-    #[inline]
-    #[must_use]
     fn from(s: &str) -> Self {
         Self::parse(s)
     }
 }
 
 impl From<Label> for String {
-    #[inline]
-    #[must_use]
     fn from(label: Label) -> Self {
         format!("{label}")
     }
