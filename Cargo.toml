@@ -2,8 +2,8 @@
 name = "chronver"
 version = "0.2.1"
 authors = ["Dominik Nakamura <dnaka91@gmail.com>"]
-edition = "2021"
-rust-version = "1.60"
+edition = "2024"
+rust-version = "1.85"
 license = "MIT"
 readme = "README.md"
 description = "Chronologic version parsing."
@@ -21,11 +21,11 @@ all-features = true
 
 [dependencies]
 serde = { version = "1.0.219", optional = true, features = ["derive"] }
-thiserror = "1.0.65"
-time = { version = "0.3.17", features = ["formatting", "macros", "parsing"] }
+thiserror = "2.0.12"
+time = { version = "0.3.41", features = ["formatting", "macros", "parsing"] }
 
 [dev-dependencies]
-criterion = { version = "0.5.1", default-features = false }
+criterion = { version = "0.7.0", default-features = false }
 semver = "1.0.26"
 serde_json = "1.0.142"
 version-sync = "0.9.5"

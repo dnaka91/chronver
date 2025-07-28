@@ -41,7 +41,12 @@
 
 #![doc(html_root_url = "https://docs.rs/chronver/0.2.1")]
 #![forbid(unsafe_code)]
-#![deny(clippy::all, clippy::pedantic)]
+#![deny(
+    rust_2018_idioms,
+    rust_2024_compatibility,
+    clippy::all,
+    clippy::pedantic
+)]
 #![warn(clippy::nursery)]
 #![warn(missing_docs, clippy::missing_docs_in_private_items)]
 
@@ -52,8 +57,8 @@ use std::{
 };
 
 use thiserror::Error;
-use time::{format_description::FormatItem, macros::format_description, OffsetDateTime};
 pub use time::{Date, Month};
+use time::{OffsetDateTime, format_description::FormatItem, macros::format_description};
 
 /// An error type for this crate.
 #[derive(Error, Debug, Clone, Eq, PartialEq)]
@@ -236,7 +241,7 @@ impl FromStr for Version {
 }
 
 impl Display for Version {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.date.format(&DATE_FORMAT).map_err(|_| fmt::Error)?)?;
         if self.changeset > 0 {
             write!(f, ".{}", self.changeset)?;
@@ -333,7 +338,7 @@ impl Label {
 }
 
 impl Display for Label {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Text(s) => f.write_str(s),
             Self::Feature { branch, changeset } => write!(f, "{branch}.{changeset}"),
