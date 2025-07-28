@@ -24,7 +24,7 @@
 //!     Version::parse("2020.01.06").unwrap(),
 //!     Version {
 //!         date: date!(2020 - 01 - 06),
-//!         changeset: 0,
+//!         changeset: None,
 //!         kind: Kind::Regular,
 //!     }
 //! );
@@ -54,6 +54,7 @@
 use std::{
     convert::{Infallible, TryFrom},
     fmt::{self, Display},
+    num::NonZero,
     str::FromStr,
 };
 
@@ -94,7 +95,7 @@ pub struct Version {
     /// the last release.
     pub date: Date,
     /// The changeset number, to be incremented when a change was released on the same day.
-    pub changeset: u32,
+    pub changeset: Option<Changeset>,
     /// The kind, which can have any format or follow a branch formatting. It describes the kind of
     /// release and carries further semantics.
     pub kind: Kind,
@@ -120,7 +121,7 @@ impl Version {
     /// # Examples
     ///
     /// ```
-    /// use chronver::{Kind, Version};
+    /// use chronver::{Changeset, Kind, Version};
     /// use time::macros::date;
     ///
     /// // Basic version with just a date
@@ -128,7 +129,7 @@ impl Version {
     ///     Version::parse("2020.03.05"),
     ///     Ok(Version {
     ///         date: date!(2020 - 03 - 05),
-    ///         changeset: 0,
+    ///         changeset: None,
     ///         kind: Kind::Regular,
     ///     })
     /// );
@@ -138,7 +139,7 @@ impl Version {
     ///     Version::parse("2020.03.05.2"),
     ///     Ok(Version {
     ///         date: date!(2020 - 03 - 05),
-    ///         changeset: 2,
+    ///         changeset: Changeset::new(2),
     ///         kind: Kind::Regular,
     ///     })
     /// );
@@ -148,7 +149,7 @@ impl Version {
     ///     Version::parse("2020.03.05.2-new"),
     ///     Ok(Version {
     ///         date: date!(2020 - 03 - 05),
-    ///         changeset: 2,
+    ///         changeset: Changeset::new(2),
     ///         kind: Kind::Feature {
     ///             name: "new".to_owned()
     ///         },
@@ -171,13 +172,14 @@ impl Version {
 
         let (changeset, kind_pos) = if let Some(rem) = rem.strip_prefix('.') {
             let end = rem.find(|c: char| !c.is_ascii_digit()).unwrap_or(rem.len());
-            (rem[..end].parse().map_err(ChronVerError::from)?, end + 1)
+            let changeset = rem[..end].parse().map_err(ChronVerError::from)?;
+            (Changeset::new(changeset), end + 1)
         } else {
             ensure!(
                 rem.is_empty() || rem.starts_with('-'),
                 ChronVerError::InvalidKind
             );
-            (0, 0)
+            (None, 0)
         };
 
         let rem = &rem[kind_pos..];
@@ -201,10 +203,13 @@ impl Version {
     pub fn update(&mut self) {
         let new_date = OffsetDateTime::now_utc().date();
         if self.date == new_date {
-            self.changeset += 1;
+            self.changeset = self.changeset.map_or_else(
+                || Changeset::new(1),
+                |cs| Some(cs.checked_add(1).unwrap_or(Changeset::MAX)),
+            );
         } else {
             self.date = new_date;
-            self.changeset = 0;
+            self.changeset = None;
         }
         self.kind = Kind::Regular;
     }
@@ -229,7 +234,7 @@ impl Default for Version {
     fn default() -> Self {
         Self {
             date: OffsetDateTime::now_utc().date(),
-            changeset: 0,
+            changeset: None,
             kind: Kind::default(),
         }
     }
@@ -246,8 +251,8 @@ impl FromStr for Version {
 impl Display for Version {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.date.format(&DATE_FORMAT).map_err(|_| fmt::Error)?)?;
-        if self.changeset > 0 {
-            write!(f, ".{}", self.changeset)?;
+        if let Some(changeset) = self.changeset {
+            write!(f, ".{changeset}")?;
         }
 
         if !matches!(self.kind, Kind::Regular) {
@@ -262,7 +267,7 @@ impl From<Date> for Version {
     fn from(date: Date) -> Self {
         Self {
             date,
-            changeset: 0,
+            changeset: None,
             kind: Kind::Regular,
         }
     }
@@ -289,6 +294,54 @@ impl TryFrom<&str> for Version {
 impl From<Version> for String {
     fn from(version: Version) -> Self {
         format!("{version}")
+    }
+}
+
+/// The changeset which is an incremental value in cases where multiple releases were done on the
+/// same day.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Changeset(NonZero<u32>);
+
+impl Changeset {
+    /// The maximum possible value for a changeset.
+    const MAX: Self = Self(NonZero::<u32>::MAX);
+
+    /// Try crate a new changeset version from a raw [`u32`]. Changesets must be positive numbers or
+    /// are omitted. Therefore, passing the literal `0` will yield `None` as return value.
+    #[must_use]
+    pub const fn new(value: u32) -> Option<Self> {
+        match NonZero::new(value) {
+            Some(value) => Some(Self(value)),
+            None => None,
+        }
+    }
+
+    /// Get the raw changeset value.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// let cs = chronver::Changeset::new(1).unwrap();
+    /// assert_eq!(1, cs.get());
+    /// ```
+    #[must_use]
+    pub const fn get(&self) -> u32 {
+        self.0.get()
+    }
+
+    /// Perform a checked add on the changeset, which avoids wrapping around boundaries of the
+    /// underlying raw `u32` value.
+    const fn checked_add(self, value: u32) -> Option<Self> {
+        match self.0.checked_add(value) {
+            Some(value) => Some(Self(value)),
+            None => None,
+        }
+    }
+}
+
+impl Display for Changeset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -392,7 +445,7 @@ mod tests {
         assert_eq!(
             Version {
                 date: date!(2019 - 01 - 06),
-                changeset: 12,
+                changeset: Changeset::new(12),
                 kind: Kind::Regular,
             },
             version.unwrap()
@@ -411,7 +464,7 @@ mod tests {
         assert_eq!(
             Version {
                 date: date!(2019 - 01 - 06),
-                changeset: 0,
+                changeset: None,
                 kind: Kind::Feature {
                     name: "test".to_owned()
                 }
@@ -421,12 +474,12 @@ mod tests {
     }
 
     #[test]
-    fn with_changeset_and_kind() {
+    fn with_changeset_and_label() {
         let version = Version::parse("2019.01.06.1-test");
         assert_eq!(
             Version {
                 date: date!(2019 - 01 - 06),
-                changeset: 1,
+                changeset: Changeset::new(1),
                 kind: Kind::Feature {
                     name: "test".to_owned()
                 }
@@ -436,12 +489,12 @@ mod tests {
     }
 
     #[test]
-    fn with_default_changeset_and_kind() {
+    fn with_default_changeset_and_feature() {
         let version = Version::parse("2019.01.06.0-test");
         assert_eq!(
             Version {
                 date: date!(2019 - 01 - 06),
-                changeset: 0,
+                changeset: None,
                 kind: Kind::Feature {
                     name: "test".to_owned()
                 }
