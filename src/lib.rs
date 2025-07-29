@@ -64,6 +64,9 @@ use time::OffsetDateTime;
 /// An error type for this crate.
 #[derive(Error, Debug, Clone, Eq, PartialEq)]
 pub enum ChronVerError {
+    /// The version string contains invalid characters.
+    #[error("Version string contains non-ascii characters")]
+    NonAscii,
     /// The version string was too short.
     #[error("Version string is too short")]
     TooShort,
@@ -160,6 +163,7 @@ impl Version {
     /// valid date in the format `YYYY.MM.DD`. Second, when a **changeset** follows the date but
     /// it is not a valid `u32` number.
     pub fn parse(version: &str) -> Result<Self, ChronVerError> {
+        ensure!(version.is_ascii(), ChronVerError::NonAscii);
         ensure!(version.len() >= DATE_LENGTH, ChronVerError::TooShort);
 
         let date = version[..DATE_LENGTH].parse()?;
@@ -421,6 +425,16 @@ impl Changeset {
             Some(value) => Some(Self(value)),
             None => None,
         }
+    }
+}
+
+impl FromStr for Changeset {
+    type Err = ChronVerError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        NonZero::new(s.parse()?)
+            .ok_or(ChronVerError::TooShort)
+            .map(Self)
     }
 }
 
