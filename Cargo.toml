@@ -10,7 +10,7 @@ repository = "https://forge.dnaka91.rocks/dnaka91/chronver"
 license = "MIT"
 keywords = ["version", "chronologic"]
 categories = ["development-tools", "parsing"]
-include = ["src/**/*.rs", "LICENSE", "README.md"]
+include = ["src/**/*.rs", "LICENSE.md", "README.md"]
 
 [package.metadata.docs.rs]
 all-features = true

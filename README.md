@@ -27,4 +27,4 @@ chronver = "0.2.1"
 
 ## License
 
-This project is licensed under [MIT License](LICENSE) (or <http://opensource.org/licenses/MIT>).
+This project is licensed under [MIT License](LICENSE.md) (or <http://opensource.org/licenses/MIT>).
