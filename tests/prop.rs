@@ -7,6 +7,11 @@ proptest! {
     }
 
     #[test]
+    fn parse2(value in "\\d+\\.\\d+\\.\\d+(\\.\\d+)?(-\\w+)?") {
+        value.parse::<chronver::Version>().ok();
+    }
+
+    #[test]
     fn parse_date(value: String) {
         value.parse::<chronver::Date>().ok();
     }

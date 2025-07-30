@@ -22,5 +22,5 @@ fn semver(value: &str) -> semver::Version {
     "2019.01.06.1-test.1",
 ])]
 fn chronver(value: &str) -> chronver::Version {
-    chronver::Version::parse(black_box(value)).unwrap()
+    chronver::Version::try_from(black_box(value)).unwrap()
 }

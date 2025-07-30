@@ -21,7 +21,7 @@
 //! use time::macros::date;
 //!
 //! assert_eq!(
-//!     Version::parse("2020.01.06").unwrap(),
+//!     Version::try_from("2020.01.06").unwrap(),
 //!     Version {
 //!         date: date!(2020 - 01 - 06).into(),
 //!         changeset: None,
@@ -36,8 +36,8 @@
 //! use chronver::Version;
 //!
 //! assert_ne!(
-//!     Version::parse("2020.01.06-alpha").unwrap(),
-//!     Version::parse("2020.01.06-beta").unwrap()
+//!     Version::try_from("2020.01.06-alpha").unwrap(),
+//!     Version::try_from("2020.01.06-beta").unwrap()
 //! );
 //! ```
 
@@ -51,55 +51,36 @@
 #![warn(clippy::nursery)]
 #![warn(missing_docs, clippy::missing_docs_in_private_items)]
 
+pub mod error;
+
 use std::{
-    convert::{Infallible, TryFrom},
+    convert::TryFrom,
     fmt::{self, Display},
     num::NonZero,
     str::FromStr,
 };
 
-use thiserror::Error;
 use time::OffsetDateTime;
 
-/// An error type for this crate.
-#[derive(Error, Debug, Clone, Eq, PartialEq)]
-pub enum ChronVerError {
-    /// The version string contains invalid characters.
-    #[error("Version string contains non-ascii characters")]
-    NonAscii,
-    /// The version string was too short.
-    #[error("Version string is too short")]
-    TooShort,
-    /// An error occurred while parsing the version component.
-    #[error("Invalid version string")]
-    InvalidVersion,
-    /// An error occurred while constructing an version from date components.
-    #[error("Invalid date components")]
-    InvalidComponents(#[from] time::error::ComponentRange),
-    /// An error occurred while parsing the changeset component.
-    #[error("Invalid changeset")]
-    InvalidChangeset(#[from] std::num::ParseIntError),
-    /// An error occurred while parsing the feature component.
-    #[error("Invalid kind")]
-    InvalidKind,
-}
+use self::error::{ParseChangesetError, ParseDateError, ParseError, ParseKindError};
 
 /// Represents a version number conforming to the chronologic versioning scheme.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[cfg_attr(
     feature = "serde",
     derive(serde::Serialize, serde::Deserialize),
-    serde(try_from = "&str"),
-    serde(into = "String")
+    serde(try_from = "&str")
 )]
 pub struct Version {
     /// The date of release, to be updated whenever a new release is made on a different date than
     /// the last release.
     pub date: Date,
     /// The changeset number, to be incremented when a change was released on the same day.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub changeset: Option<Changeset>,
     /// The kind, which can have any format or follow a branch formatting. It describes the kind of
     /// release and carries further semantics.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Kind::is_regular"))]
     pub kind: Kind,
 }
 
@@ -116,87 +97,6 @@ macro_rules! ensure {
 }
 
 impl Version {
-    /// Parse a string into a chronver object.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use chronver::{Changeset, Kind, Version};
-    /// use time::macros::date;
-    ///
-    /// // Basic version with just a date
-    /// assert_eq!(
-    ///     Version::parse("2020.03.05"),
-    ///     Ok(Version {
-    ///         date: date!(2020 - 03 - 05).into(),
-    ///         changeset: None,
-    ///         kind: Kind::Regular,
-    ///     })
-    /// );
-    ///
-    /// // Version with a changeset
-    /// assert_eq!(
-    ///     Version::parse("2020.03.05.2"),
-    ///     Ok(Version {
-    ///         date: date!(2020 - 03 - 05).into(),
-    ///         changeset: Changeset::new(2),
-    ///         kind: Kind::Regular,
-    ///     })
-    /// );
-    ///
-    /// // And with feature
-    /// assert_eq!(
-    ///     Version::parse("2020.03.05.2-new"),
-    ///     Ok(Version {
-    ///         date: date!(2020 - 03 - 05).into(),
-    ///         changeset: Changeset::new(2),
-    ///         kind: Kind::Feature {
-    ///             name: "new".to_owned()
-    ///         },
-    ///     })
-    /// );
-    /// ```
-    ///
-    /// # Errors
-    ///
-    /// An error can occur in two cases. First, when the very first part of the version is not a
-    /// valid date in the format `YYYY.MM.DD`. Second, when a **changeset** follows the date but
-    /// it is not a valid `u32` number.
-    pub fn parse(version: &str) -> Result<Self, ChronVerError> {
-        ensure!(version.is_ascii(), ChronVerError::NonAscii);
-        ensure!(version.len() >= DATE_LENGTH, ChronVerError::TooShort);
-
-        let date = version[..DATE_LENGTH].parse()?;
-        let rem = &version[DATE_LENGTH..];
-
-        let (changeset, kind_pos) = if let Some(rem) = rem.strip_prefix('.') {
-            let end = rem.find(|c: char| !c.is_ascii_digit()).unwrap_or(rem.len());
-            let changeset = rem[..end].parse().map_err(ChronVerError::from)?;
-            (Changeset::new(changeset), end + 1)
-        } else {
-            ensure!(
-                rem.is_empty() || rem.starts_with('-'),
-                ChronVerError::InvalidKind
-            );
-            (None, 0)
-        };
-
-        let rem = &rem[kind_pos..];
-
-        let kind = if let Some(rem) = rem.strip_prefix('-') {
-            rem.into()
-        } else {
-            ensure!(rem.is_empty(), ChronVerError::InvalidKind);
-            Kind::Regular
-        };
-
-        Ok(Self {
-            date,
-            changeset,
-            kind,
-        })
-    }
-
     /// Update the version to the current date or increment the changeset in case the date
     /// is the same. The [`Kind`] will be reset to [`Regular`](Kind::Regular).
     pub fn update(&mut self) {
@@ -220,8 +120,8 @@ impl Version {
     /// ```
     /// use chronver::Version;
     ///
-    /// assert!(Version::parse("2020.03.05-break").unwrap().is_breaking());
-    /// assert!(!Version::parse("2020.03.05").unwrap().is_breaking());
+    /// assert!(Version::try_from("2020.03.05-break").unwrap().is_breaking());
+    /// assert!(!Version::try_from("2020.03.05").unwrap().is_breaking());
     /// ```
     #[must_use]
     pub const fn is_breaking(&self) -> bool {
@@ -240,10 +140,42 @@ impl Default for Version {
 }
 
 impl FromStr for Version {
-    type Err = ChronVerError;
+    type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
+        s.try_into()
+    }
+}
+
+impl TryFrom<&str> for Version {
+    type Error = ParseError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        ensure!(value.is_ascii(), Self::Error::NonAscii);
+        ensure!(value.len() >= DATE_LENGTH, Self::Error::TooShort);
+
+        let (date, rem) = value.split_at(DATE_LENGTH);
+
+        let (changeset, rem) = if let Some(rem) = rem.strip_prefix('.') {
+            let pos = rem.find(|c: char| !c.is_ascii_digit()).unwrap_or(rem.len());
+            let (changeset, rem) = rem.split_at(pos);
+            (Some(changeset.parse()?), rem)
+        } else {
+            (None, rem)
+        };
+
+        let kind = if let Some(rem) = rem.strip_prefix('-') {
+            rem.try_into()?
+        } else {
+            ensure!(rem.is_empty(), Self::Error::TrailingData);
+            Kind::Regular
+        };
+
+        Ok(Self {
+            date: date.parse()?,
+            changeset,
+            kind,
+        })
     }
 }
 
@@ -273,32 +205,13 @@ impl From<time::Date> for Version {
     }
 }
 
-impl TryFrom<(i32, time::Month, u8)> for Version {
-    type Error = ChronVerError;
-
-    fn try_from(tuple: (i32, time::Month, u8)) -> Result<Self, Self::Error> {
-        time::Date::from_calendar_date(tuple.0, tuple.1, tuple.2)
-            .map(Self::from)
-            .map_err(Into::into)
-    }
-}
-
-impl TryFrom<&str> for Version {
-    type Error = ChronVerError;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        s.parse()
-    }
-}
-
-impl From<Version> for String {
-    fn from(version: Version) -> Self {
-        format!("{version}")
-    }
-}
-
 /// The date which is the main component of a chronologic version.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Deserialize),
+    serde(try_from = "&str")
+)]
 pub struct Date(time::Date);
 
 impl Date {
@@ -355,28 +268,36 @@ impl Display for Date {
 }
 
 impl FromStr for Date {
-    type Err = ChronVerError;
+    type Err = ParseDateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (year, rem) = s.split_once('.').ok_or(ChronVerError::InvalidVersion)?;
-        let (month, day) = rem.split_once('.').ok_or(ChronVerError::InvalidVersion)?;
-
-        let date = time::Date::from_calendar_date(
-            year.parse()?,
-            month.parse::<u8>()?.try_into()?,
-            day.parse()?,
-        )?;
-
-        Ok(Self(date))
+        s.try_into()
     }
 }
 
 impl TryFrom<&str> for Date {
-    type Error = ChronVerError;
+    type Error = ParseDateError;
 
     #[inline]
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        value.parse()
+        let (year, rem) = value
+            .split_once('.')
+            .ok_or(Self::Error::MissingMonthSeparator)?;
+        let (month, day) = rem
+            .split_once('.')
+            .ok_or(Self::Error::MissingDaySeparator)?;
+
+        let date = time::Date::from_calendar_date(
+            year.parse()?,
+            month
+                .parse::<u8>()?
+                .try_into()
+                .map_err(Self::Error::invalid_month)?,
+            day.parse()?,
+        )
+        .map_err(Self::Error::invalid_date)?;
+
+        Ok(Self(date))
     }
 }
 
@@ -386,9 +307,30 @@ impl From<time::Date> for Date {
     }
 }
 
+#[cfg(feature = "serde")]
+impl serde::Serialize for Date {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let mut ser = serializer.serialize_struct("Date", 3)?;
+        ser.serialize_field("year", &self.0.year())?;
+        ser.serialize_field("month", &u8::from(self.0.month()))?;
+        ser.serialize_field("day", &self.0.day())?;
+        ser.end()
+    }
+}
+
 /// The changeset which is an incremental value in cases where multiple releases were done on the
 /// same day.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Deserialize),
+    serde(try_from = "&str")
+)]
 pub struct Changeset(NonZero<u32>);
 
 impl Changeset {
@@ -429,11 +371,19 @@ impl Changeset {
 }
 
 impl FromStr for Changeset {
-    type Err = ChronVerError;
+    type Err = ParseChangesetError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        NonZero::new(s.parse()?)
-            .ok_or(ChronVerError::TooShort)
+        s.try_into()
+    }
+}
+
+impl TryFrom<&str> for Changeset {
+    type Error = ParseChangesetError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        NonZero::new(value.parse()?)
+            .ok_or(ParseChangesetError::Zero)
             .map(Self)
     }
 }
@@ -444,13 +394,22 @@ impl Display for Changeset {
     }
 }
 
+#[cfg(feature = "serde")]
+impl serde::Serialize for Changeset {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.0.get().serialize(serializer)
+    }
+}
+
 /// The kind of release, usually [`Self::Regular`].
 #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[cfg_attr(
     feature = "serde",
-    derive(serde::Serialize, serde::Deserialize),
-    serde(from = "&str"),
-    serde(into = "String")
+    derive(serde::Deserialize),
+    serde(try_from = "&str")
 )]
 pub enum Kind {
     /// Normal release without any extras.
@@ -466,30 +425,33 @@ pub enum Kind {
 }
 
 impl Kind {
-    ///
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use chronver::Kind;
-    ///
-    /// assert_eq!(Kind::parse("break"), Kind::Breaking);
-    /// assert_eq!(
-    ///     Kind::parse("feature"),
-    ///     Kind::Feature {
-    ///         name: "feature".to_owned(),
-    ///     }
-    /// );
-    /// ```
-    #[must_use]
-    pub fn parse(value: &str) -> Self {
-        match value {
+    /// Tell whether this kind is [`Self::Regular`].
+    const fn is_regular(&self) -> bool {
+        matches!(self, Self::Regular)
+    }
+}
+
+impl FromStr for Kind {
+    type Err = ParseKindError;
+
+    #[inline]
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.try_into()
+    }
+}
+
+impl TryFrom<&str> for Kind {
+    type Error = ParseKindError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Ok(match value {
             "" => Self::Regular,
             "break" => Self::Breaking,
-            _ => Self::Feature {
+            value if value.is_ascii() => Self::Feature {
                 name: value.to_owned(),
             },
-        }
+            _ => return Err(ParseKindError::NonAscii),
+        })
     }
 }
 
@@ -503,26 +465,17 @@ impl Display for Kind {
     }
 }
 
-impl FromStr for Kind {
-    type Err = Infallible;
-
-    #[inline]
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::parse(s))
-    }
-}
-
-impl From<&str> for Kind {
-    #[inline]
-    fn from(value: &str) -> Self {
-        Self::parse(value)
-    }
-}
-
-impl From<Kind> for String {
-    #[inline]
-    fn from(value: Kind) -> Self {
-        format!("{value}")
+#[cfg(feature = "serde")]
+impl serde::Serialize for Kind {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Self::Regular => serializer.serialize_none(),
+            Self::Breaking => serializer.serialize_some("break"),
+            Self::Feature { name } => serializer.serialize_some(name),
+        }
     }
 }
 
@@ -534,32 +487,28 @@ mod tests {
 
     #[test]
     fn simple_version() {
-        let version = Version::parse("2019.01.06");
-        assert_eq!(Version::from(date!(2019 - 01 - 06)), version.unwrap());
+        let version = Version::try_from("2019.01.06").unwrap();
+        assert_eq!(Version::from(date!(2019 - 01 - 06)), version);
+        assert_eq!("2019.01.06", version.to_string());
     }
 
     #[test]
     fn with_changeset() {
-        let version = Version::parse("2019.01.06.12");
+        let version = Version::try_from("2019.01.06.12").unwrap();
         assert_eq!(
             Version {
                 date: date!(2019 - 01 - 06).into(),
                 changeset: Changeset::new(12),
                 kind: Kind::Regular,
             },
-            version.unwrap()
+            version
         );
-    }
-
-    #[test]
-    fn with_default_changeset() {
-        let version = Version::parse("2019.01.06.0");
-        assert_eq!(Version::from(date!(2019 - 01 - 06)), version.unwrap());
+        assert_eq!("2019.01.06.12", version.to_string());
     }
 
     #[test]
     fn with_feature() {
-        let version = Version::parse("2019.01.06-test");
+        let version = Version::try_from("2019.01.06-test").unwrap();
         assert_eq!(
             Version {
                 date: date!(2019 - 01 - 06).into(),
@@ -568,13 +517,28 @@ mod tests {
                     name: "test".to_owned()
                 }
             },
-            version.unwrap()
+            version
         );
+        assert_eq!("2019.01.06-test", version.to_string());
     }
 
     #[test]
-    fn with_changeset_and_label() {
-        let version = Version::parse("2019.01.06.1-test");
+    fn with_breaking() {
+        let version = Version::try_from("2019.01.06-break").unwrap();
+        assert_eq!(
+            Version {
+                date: date!(2019 - 01 - 06).into(),
+                changeset: None,
+                kind: Kind::Breaking,
+            },
+            version,
+        );
+        assert_eq!("2019.01.06-break", version.to_string());
+    }
+
+    #[test]
+    fn with_changeset_and_feature() {
+        let version = Version::try_from("2019.01.06.1-test").unwrap();
         assert_eq!(
             Version {
                 date: date!(2019 - 01 - 06).into(),
@@ -583,87 +547,97 @@ mod tests {
                     name: "test".to_owned()
                 }
             },
-            version.unwrap()
+            version
         );
-    }
-
-    #[test]
-    fn with_default_changeset_and_feature() {
-        let version = Version::parse("2019.01.06.0-test");
-        assert_eq!(
-            Version {
-                date: date!(2019 - 01 - 06).into(),
-                changeset: None,
-                kind: Kind::Feature {
-                    name: "test".to_owned()
-                }
-            },
-            version.unwrap()
-        );
+        assert_eq!("2019.01.06.1-test", version.to_string());
     }
 
     #[test]
     fn too_short() {
-        let version = Version::parse("2019");
-        assert_eq!(ChronVerError::TooShort, version.unwrap_err());
+        let version = Version::try_from("2019");
+        assert_eq!(ParseError::TooShort, version.unwrap_err());
     }
 
     #[test]
     fn invalid_date() {
-        let version = Version::parse("2019.30.01");
-        assert!(matches!(
-            version.unwrap_err(),
-            ChronVerError::InvalidComponents(_)
-        ));
+        let version = Version::try_from("2019.30.01");
+        assert!(matches!(version.unwrap_err(), ParseError::InvalidDate(_)));
     }
 
     #[test]
     fn invalid_changeset() {
-        let version = Version::parse("2019.01.06+111");
-        assert_eq!(ChronVerError::InvalidKind, version.unwrap_err());
+        let version = Version::try_from("2019.01.06+111");
+        assert_eq!(ParseError::TrailingData, version.unwrap_err());
     }
 
     #[test]
     fn invalid_changeset_number() {
-        let version = Version::parse("2019.01.06.a");
+        let version = Version::try_from("2019.01.06.a");
         assert!(matches!(
             version.unwrap_err(),
-            ChronVerError::InvalidChangeset(_)
+            ParseError::InvalidChangeset(_)
         ));
     }
 
     #[test]
     fn invalid_kind() {
-        let version = Version::parse("2019.01.06.1+test");
-        assert_eq!(ChronVerError::InvalidKind, version.unwrap_err());
+        let version = Version::try_from("2019.01.06.1+test");
+        assert_eq!(ParseError::TrailingData, version.unwrap_err());
     }
 
     #[cfg(feature = "serde")]
     #[test]
     fn serialize() {
-        let version = Version::parse("2019.01.06.1-test.2");
+        let version = Version::try_from("2019.01.06.1-test");
         assert_eq!(
-            "\"2019.01.06.1-test.2\"",
-            serde_json::to_string(&version.unwrap()).unwrap()
+            serde_json::json!({
+                "date": {
+                    "year": 2019,
+                    "month": 1,
+                    "day": 6,
+                },
+                "changeset": 1,
+                "kind": "test",
+            }),
+            serde_json::to_value(version.unwrap()).unwrap()
         );
 
-        let version = Version::parse("2019.01.06.1-test");
+        let version = Version::try_from("2019.01.06-break");
         assert_eq!(
-            "\"2019.01.06.1-test\"",
-            serde_json::to_string(&version.unwrap()).unwrap()
+            serde_json::json!({
+                "date": {
+                    "year": 2019,
+                    "month": 1,
+                    "day": 6,
+                },
+                "kind": "break",
+            }),
+            serde_json::to_value(version.unwrap()).unwrap()
+        );
+
+        let version = Version::try_from("2019.01.06");
+        assert_eq!(
+            serde_json::json!({
+                "date": {
+                    "year": 2019,
+                    "month": 1,
+                    "day": 6,
+                },
+            }),
+            serde_json::to_value(version.unwrap()).unwrap()
         );
     }
 
     #[cfg(feature = "serde")]
     #[test]
     fn deserialize() {
-        let version = Version::parse("2019.01.06.1-test.2");
+        let version = Version::try_from("2019.01.06.1-test.2");
         assert_eq!(
             serde_json::from_str::<Version>("\"2019.01.06.1-test.2\"").unwrap(),
             version.unwrap()
         );
 
-        let version = Version::parse("2019.01.06.1-test");
+        let version = Version::try_from("2019.01.06.1-test");
         assert_eq!(
             serde_json::from_str::<Version>("\"2019.01.06.1-test\"").unwrap(),
             version.unwrap()
