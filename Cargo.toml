@@ -4,17 +4,13 @@ version = "0.2.1"
 authors = ["Dominik Nakamura <dnaka91@gmail.com>"]
 edition = "2024"
 rust-version = "1.85"
-license = "MIT"
-readme = "README.md"
 description = "Chronologic version parsing."
-homepage = "https://github.com/dnaka91/chronver"
-repository = "https://github.com/dnaka91/chronver"
+homepage = "https://forge.dnaka91.rocks/dnaka91/chronver"
+repository = "https://forge.dnaka91.rocks/dnaka91/chronver"
+license = "MIT"
 keywords = ["version", "chronologic"]
 categories = ["development-tools", "parsing"]
-exclude = [".github", ".gitignore", "deny.toml", "release.toml"]
-
-[badges.maintenance]
-status = "deprecated"
+include = ["src/**/*.rs", "LICENSE", "README.md"]
 
 [package.metadata.docs.rs]
 all-features = true
