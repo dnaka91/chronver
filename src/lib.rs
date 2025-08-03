@@ -97,20 +97,18 @@ macro_rules! ensure {
 }
 
 impl Version {
-    /// Update the version to the current date or increment the changeset in case the date
+    /// Increment the version to the current date or increment the changeset in case the date
     /// is the same. The [`Kind`] will be reset to [`Regular`](Kind::Regular).
-    pub fn update(&mut self) {
-        let new_date = OffsetDateTime::now_utc().date().into();
-        if self.date == new_date {
-            self.changeset = self.changeset.map_or_else(
+    #[must_use]
+    pub fn increment(&self) -> Self {
+        let mut new = Self::default();
+        if self.date == new.date {
+            new.changeset = self.changeset.map_or_else(
                 || Changeset::new(1),
                 |cs| Some(cs.checked_add(1).unwrap_or(Changeset::MAX)),
             );
-        } else {
-            self.date = new_date;
-            self.changeset = None;
         }
-        self.kind = Kind::Regular;
+        new
     }
 
     /// Check whether the current version introduces breaking changes.
@@ -583,6 +581,42 @@ mod tests {
     fn invalid_kind() {
         let version = Version::try_from("2019.01.06.1+test");
         assert_eq!(ParseError::TrailingData, version.unwrap_err());
+    }
+
+    #[test]
+    fn increment_old() {
+        let version = Version::try_from("2019.01.06").unwrap();
+        assert_eq!(Version::default(), version.increment());
+    }
+
+    #[test]
+    fn increment_same_date() {
+        let version = Version::default();
+        assert_eq!(
+            Version {
+                changeset: Changeset::new(1),
+                ..Version::default()
+            },
+            version.increment()
+        );
+    }
+
+    #[test]
+    fn increment_same_date_twice() {
+        let version = Version::default();
+        assert_eq!(
+            Version {
+                changeset: Changeset::new(2),
+                ..Version::default()
+            },
+            version.increment().increment()
+        );
+    }
+
+    #[test]
+    fn increment_breaking() {
+        let version = Version::try_from("2019.01.06-break").unwrap();
+        assert_eq!(Version::default(), version.increment());
     }
 
     #[cfg(feature = "serde")]
