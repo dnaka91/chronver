@@ -12,6 +12,11 @@ proptest! {
     }
 
     #[test]
+    fn invalid_date(value in "\\D{4}\\.\\D{2}\\.\\D{2}") {
+        value.parse::<chronver::Version>().ok();
+    }
+
+    #[test]
     fn parse_date(value: String) {
         value.parse::<chronver::Date>().ok();
     }
